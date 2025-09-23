@@ -1,0 +1,89 @@
+{
+  "name": "SaFara - Tourist Safety App",
+  "short_name": "SaFara",
+  "description": "Your trusted companion for safe travel in India. Emergency SOS, geofence alerts, digital ID verification, and multilingual safety guidance.",
+  "start_url": "/",
+  "display": "standalone",
+  "background_color": "#ffffff",
+  "theme_color": "#2563eb",
+  "orientation": "portrait",
+  "scope": "/",
+  "lang": "en",
+  "categories": ["travel", "safety", "navigation"],
+  "icons": [
+    {
+      "src": "/icon-72.png",
+      "sizes": "72x72",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-96.png", 
+      "sizes": "96x96",
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-128.png",
+      "sizes": "128x128", 
+      "type": "image/png",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-192.svg",
+      "sizes": "144x144",
+      "type": "image/png/svg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-193.svg",
+      "sizes": "152x152",
+      "type": "image/png/svg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-192.svg",
+      "sizes": "192x192",
+      "type": "image/png/svg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-192.svg",
+      "sizes": "384x384",
+      "type": "image/png/svg",
+      "purpose": "maskable any"
+    },
+    {
+      "src": "/icon-192.svg",
+      "sizes": "512x512",
+      "type": "image/png/sv",
+      "purpose": "maskable any"
+    }
+  ],
+  "shortcuts": [
+    {
+      "name": "Emergency SOS",
+      "short_name": "SOS",
+      "description": "Quick access to emergency services",
+      "url": "/sos",
+      "icons": [
+        {
+          "src": "/icon-192.png",
+          "sizes": "192x192"
+        }
+      ]
+    },
+    {
+      "name": "Show Tourist ID",
+      "short_name": "ID",
+      "description": "Display your digital tourist ID",
+      "url": "/tourist-id",
+      "icons": [
+        {
+          "src": "/icon-192.png", 
+          "sizes": "192x192"
+        }
+      ]
+    }
+  ]
+}

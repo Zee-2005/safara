@@ -1,0 +1,50 @@
+# Logs
+logs
+*.log
+npm-debug.log*
+yarn-debug.log*
+pnpm-debug.log*
+lerna-debug.log*
+
+# Dependency directories (any depth)
+node_modules/
+
+# Build outputs
+dist/
+build/
+out/
+coverage/
+.nyc_output
+
+# Bundler/dev caches
+.vite/
+.parcel-cache/
+.cache/
+.turbo/
+
+# OS & editors
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+
+# Env & local overrides
+.env
+.env.*
+!.env.example
+.env.local
+.envrc
+
+# Runtime data
+*.pid
+*.seed
+*.pid.lock
+
+# Misc
+*.tgz
+*.swp
+*.swo
+
+# Keep ORM migrations tracked (Drizzle)
+# Do NOT ignore drizzle/ migrations or meta; commit them
+# drizzle/

@@ -1,0 +1,21 @@
+{
+  "name": "safetrailmobile",
+  "private": true,
+  "version": "1.0.0",
+  "workspaces": [
+    "apps/*"
+  ],
+  "scripts": {
+    "dev": "npm run dev --workspace=@safetrail/frontend & npm run dev --workspace=@safetrail/backend",
+    "build": "npm run build --workspace=@safetrail/frontend && npm run build --workspace=@safetrail/backend",
+    "start": "npm run start --workspace=@safetrail/backend",
+    "check": "npm run check --workspace=@safetrail/backend"
+  },
+  "devDependencies": {
+    "tsx": "^4.20.5",
+    "typescript": "^5.6.3"
+  },
+  "dependencies": {
+    "cors": "^2.8.5"
+  }
+}
