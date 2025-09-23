@@ -1,4 +1,3 @@
-
 import { useState, useEffect } from 'react';
 import { Route, Switch, useLocation } from 'wouter';
 import { QueryClientProvider } from '@tanstack/react-query';
@@ -9,7 +8,7 @@ import { queryClient } from './lib/queryClient';
 
 // Component imports
 import LanguageSelector from '@/components/LanguageSelector';
-import LoginScreen from '@/components/LoginScreen';
+import AuthScreen from '@/components/AuthScreen'; // Replaces LoginScreen
 import HomeScreen from '@/components/HomeScreen';
 import ActivatedTourMode from '@/components/ActivatedTourMode';
 import SOSEmergency from '@/components/SOSEmergency';
@@ -45,7 +44,7 @@ interface TouristId {
 
 function Router() {
   const [location, navigate] = useLocation();
-  
+
   // Application state
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [user, setUser] = useState<User | null>(null);
@@ -64,7 +63,7 @@ function Router() {
           });
           console.log('User location obtained');
         },
-        (error) => {
+        (_error) => {
           // Default to Goa coordinates if location access denied
           console.log('Location access denied, using default location');
           setUserLocation({ lat: 15.2993, lng: 74.1240 });
@@ -76,7 +75,8 @@ function Router() {
   }, []);
 
   // Check for valid Tourist ID and determine mode
-  const isActivatedMode = touristId && touristId.status === 'active' && new Date() < touristId.validUntil;
+  const isActivatedMode =
+    touristId && touristId.status === 'active' && new Date() < touristId.validUntil;
 
   // Navigation handlers
   const handleLanguageSelect = (language: string) => {
@@ -84,8 +84,8 @@ function Router() {
     console.log('Language set to:', language);
   };
 
-  const handleLogin = (phone: string) => {
-    setUser({ phone, isGuest: false });
+  const handleLogin = (phoneOrEmail: string) => {
+    setUser({ phone: phoneOrEmail, isGuest: false });
     navigate('/home');
   };
 
@@ -104,7 +104,7 @@ function Router() {
   const handleTouristIdGenerated = (newTouristId: any) => {
     const touristIdWithDetails: TouristId = {
       ...newTouristId,
-      holderName: user?.isGuest ? 'Guest User' : 'Raul Handa', // In real app, this would be from user profile
+      holderName: user?.isGuest ? 'Guest User' : 'Raul Handa', // Example; replace with profile data
     };
     setTouristId(touristIdWithDetails);
     navigate('/activated-mode');
@@ -120,7 +120,6 @@ function Router() {
 
   const handleSOSEscalate = () => {
     console.log('SOS escalated to ERSS-112');
-    // In real app, this would open the 112 India app
     alert('Connecting to Emergency Services (112)...\n\nIn a real emergency, this would:\n• Open the official 112 India app\n• Share your location with authorities\n• Connect you to emergency services');
     navigate(isActivatedMode ? '/activated-mode' : '/home');
   };
@@ -161,7 +160,6 @@ function Router() {
 
   const handleGeofenceAlert = (geofence: any) => {
     console.log('Geofence alert:', geofence);
-    // In real app, this would show a push notification or in-app alert
     if (geofence.type === 'danger') {
       alert(`⚠️ Safety Alert!\n\nYou are entering: ${geofence.name}\n${geofence.description}\n\nPlease exercise caution and consider alternative routes.`);
     }
@@ -184,9 +182,9 @@ function Router() {
           onContinue={() => navigate('/login')}
         />
       </Route>
-      
+
       <Route path="/login">
-        <LoginScreen
+        <AuthScreen
           onLogin={handleLogin}
           onGuestMode={handleGuestMode}
         />
@@ -208,7 +206,6 @@ function Router() {
             onNavigate={handleNavigateToSection}
           />
         ) : (
-          // Redirect to home if no valid tourist ID
           <HomeScreen
             userPhone={user?.phone}
             isGuest={user?.isGuest}
@@ -316,9 +313,7 @@ function Router() {
               <h1 className="text-xl font-bold">Tourist ID Verification</h1>
             </div>
           </div>
-          {touristId && (
-            <QRCodeDisplay touristId={touristId} />
-          )}
+          {touristId && <QRCodeDisplay touristId={touristId} />}
         </div>
       </Route>
 

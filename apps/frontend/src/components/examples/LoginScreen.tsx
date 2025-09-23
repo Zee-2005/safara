@@ -1,4 +1,4 @@
-import LoginScreen from '../LoginScreen';
+import LoginScreen from '../AuthScreen';
 
 export default function LoginScreenExample() {
   return (
