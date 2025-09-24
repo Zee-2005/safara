@@ -50,4 +50,4 @@ Thumbs.db
 # drizzle/
 
 
- secure_storage/
+apps/backend/secure_storage/

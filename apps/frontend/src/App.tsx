@@ -17,7 +17,7 @@ import {
 
 // Component imports
 import LanguageSelector from '@/components/LanguageSelector';
-import AuthScreen from '@/components/AuthScreen'; // Replaces LoginScreen
+import AuthScreen from '@/components/AuthScreen';
 import HomeScreen from '@/components/HomeScreen';
 import ActivatedTourMode from '@/components/ActivatedTourMode';
 import SOSEmergency from '@/components/SOSEmergency';
@@ -30,7 +30,13 @@ import Leaderboard from '@/components/Leaderboard';
 import MapComponent from '@/components/MapComponent';
 import GuideChatbot from '@/components/GuideChatbot';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
-import PersonalIdDetails from '@/components/PersonalIdDetails'; // NEW details screen
+import PersonalIdDetails from '@/components/PersonalIdDetails';
+
+// NEW trip planning pages
+import PlanTripHub from '@/components/PlanTripHub';
+import AgencyBrowse from '@/components/AgencyBrowse';
+import DirectIdQuick from '@/components/DirectIdQuick';
+import TouristIdGenerate from '@/components/TouristIdGenerate';
 
 // Types
 interface User {
@@ -75,9 +81,7 @@ function Router() {
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
-        (position) => {
-          setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
-        },
+        (position) => setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude }),
         () => setUserLocation({ lat: 15.2993, lng: 74.1240 }) // Goa fallback
       );
     } else {
@@ -99,14 +103,14 @@ function Router() {
   };
 
   function handleLogout() {
-    clearUserPidData(); // remove current user's PID keys
-    clearSession();     // remove session
+    clearUserPidData();
+    clearSession();
     setUser(null);
     navigate('/login');
   }
 
   const handleGuestMode = () => {
-    clearSession(); // ensure no session persists
+    clearSession();
     setUser({ phone: '', isGuest: true });
     navigate('/home');
   };
@@ -138,7 +142,7 @@ function Router() {
         break;
       }
       case 'plan-journey':
-        navigate('/journey-planning');
+        navigate('/plan-trip'); // open trip hub
         break;
       case 'personal-safety':
         navigate('/personal-safety');
@@ -216,6 +220,23 @@ function Router() {
         />
       </Route>
 
+      {/* New trip planning flow */}
+      <Route path="/plan-trip">
+        <PlanTripHub />
+      </Route>
+
+      <Route path="/plan-trip/agencies">
+        <AgencyBrowse />
+      </Route>
+
+      <Route path="/plan-trip/direct">
+        <DirectIdQuick />
+      </Route>
+
+      <Route path="/tourist-id-generate">
+        <TouristIdGenerate />
+      </Route>
+
       <Route path="/activated-mode">
         {isActivatedMode && touristId ? (
           <ActivatedTourMode
@@ -241,6 +262,7 @@ function Router() {
         />
       </Route>
 
+      {/* Legacy route (optional to remove later) */}
       <Route path="/journey-planning">
         <JourneyPlanning
           onTouristIdGenerated={handleTouristIdGenerated}

@@ -1,4 +1,4 @@
-// src/components/HomeScreen.tsx (full replacement recommended)
+// src/components/HomeScreen.tsx
 import { useEffect, useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -8,6 +8,7 @@ import {
   User, Settings, CheckCircle, Copy, LogOut
 } from 'lucide-react';
 import { getSession, getUserItem } from '@/lib/session';
+import { readTripDraft, clearTripDraft } from '@/lib/trip';
 
 interface HomeScreenProps {
   userPhone?: string;
@@ -23,16 +24,22 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
   const [mobile, setMobile] = useState<string | null>(null);
   const [email, setEmail] = useState<string | null>(null);
 
+  // Trip draft preview (from TripPlanner)
+  const [tripDraft, setTripDraft] = useState<ReturnType<typeof readTripDraft> | null>(null);
+
   useEffect(() => {
     setPersonalId(getUserItem('pid_personal_id', s));
     setFullName(getUserItem('pid_full_name', s));
     setMobile(getUserItem('pid_mobile', s));
     setEmail(getUserItem('pid_email', s));
+    const d = readTripDraft();
+    // consider a draft “present” if it has an end date or destination/itinerary/mode set
+    if (d.endDate || d.destination || d.itinerary || d.mode) setTripDraft(d);
   }, [s]);
 
   const sections = [
     { id: 'personal-id', title: 'Create Personal ID', description: 'Verify your identity for secure travel', icon: Shield, status: isGuest ? 'disabled' : 'available', color: 'bg-safety-blue', badge: isGuest ? null : 'Required' },
-    { id: 'plan-journey', title: 'Plan Journey', description: 'Discover safe travel routes and destinations', icon: MapPin, status: 'available', color: 'bg-safety-green', badge: null },
+    { id: 'plan-journey', title: 'Plan Journey', description: 'Discover safe travel routes and destinations', icon: MapPin, status: 'available', color: 'bg-safety-green', badge: tripDraft ? 'Draft' : null },
     { id: 'personal-safety', title: 'Personal Safety', description: 'Emergency contacts and safety preferences', icon: Heart, status: isGuest ? 'limited' : 'available', color: 'bg-safety-red', badge: null },
     { id: 'feedback', title: 'Feedback', description: 'Share your travel experiences', icon: MessageSquare, status: 'available', color: 'bg-safety-yellow', badge: null },
     { id: 'leaderboard', title: 'Leaderboard', description: 'View safety achievements and rewards', icon: Trophy, status: isGuest ? 'view-only' : 'available', color: 'bg-primary', badge: null },
@@ -45,6 +52,7 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
       else onNavigate('personal-id');
       return;
     }
+    // Plan Journey routes to TripPlanner in App.tsx
     onNavigate(id);
   };
 
@@ -55,6 +63,9 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
 
   const hasPid = Boolean(personalId);
   const visibleSections = hasPid ? sections.filter(sx => sx.id !== 'personal-id') : sections;
+
+  const resumeTrip = () => onNavigate('plan-journey');
+  const clearTrip = () => { clearTripDraft(); setTripDraft(null); };
 
   return (
     <div className="min-h-screen bg-background">
@@ -91,6 +102,43 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
       </div>
 
       <div className="p-4 space-y-4">
+        {/* Trip draft quick access
+        {tripDraft && (
+          <Card className="p-6">
+            <div className="flex items-center justify-between">
+              <div className="flex items-center gap-2">
+                <MapPin className="w-4 h-4 text-safety-green" />
+                <h2 className="text-lg font-semibold">Trip draft in progress</h2>
+                <Badge variant="secondary">{(tripDraft.mode || 'direct').toUpperCase()}</Badge>
+              </div>
+              <div className="flex gap-2">
+                <Button variant="outline" onClick={clearTrip}>Clear</Button>
+                <Button onClick={resumeTrip}>Resume</Button>
+              </div>
+            </div>
+
+            <div className="mt-3 grid gap-3 sm:grid-cols-2">
+              <div>
+                <div className="text-sm text-muted-foreground">Start</div>
+                <div className="text-sm">{tripDraft.startNow ? 'Right now' : (tripDraft.startDate || '—')}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">End</div>
+                <div className="text-sm">{tripDraft.endDate || '—'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Destination</div>
+                <div className="text-sm">{tripDraft.destination || 'Auto-assign (not hometown)'}</div>
+              </div>
+              <div>
+                <div className="text-sm text-muted-foreground">Agency</div>
+                <div className="text-sm">{tripDraft.agencyId || '—'}</div>
+              </div>
+            </div>
+          </Card>
+        )} */}
+
+        {/* Personal ID card */}
         {hasPid && (
           <Card className="p-6">
             <div className="flex items-center justify-between">
