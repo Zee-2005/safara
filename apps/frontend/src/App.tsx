@@ -6,6 +6,15 @@ import { TooltipProvider } from '@/components/ui/tooltip';
 
 import { queryClient } from './lib/queryClient';
 
+// Session utilities
+import {
+  setSession,
+  getSession,
+  clearSession,
+  clearUserPidData,
+  getUserItem,
+} from '@/lib/session';
+
 // Component imports
 import LanguageSelector from '@/components/LanguageSelector';
 import AuthScreen from '@/components/AuthScreen'; // Replaces LoginScreen
@@ -13,6 +22,7 @@ import HomeScreen from '@/components/HomeScreen';
 import ActivatedTourMode from '@/components/ActivatedTourMode';
 import SOSEmergency from '@/components/SOSEmergency';
 import PersonalIdCreation from '@/components/PersonalIdCreation';
+import PersonalIdDocsUpload from '@/components/PersonalIdDocsUpload';
 import JourneyPlanning from '@/components/JourneyPlanning';
 import PersonalSafety from '@/components/PersonalSafety';
 import FeedbackSystem from '@/components/FeedbackSystem';
@@ -20,8 +30,9 @@ import Leaderboard from '@/components/Leaderboard';
 import MapComponent from '@/components/MapComponent';
 import GuideChatbot from '@/components/GuideChatbot';
 import QRCodeDisplay from '@/components/QRCodeDisplay';
+import PersonalIdDetails from '@/components/PersonalIdDetails'; // NEW details screen
 
-// Define the main application state types
+// Types
 interface User {
   phone: string;
   isGuest: boolean;
@@ -45,90 +56,87 @@ interface TouristId {
 function Router() {
   const [location, navigate] = useLocation();
 
-  // Application state
+  // App state
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [user, setUser] = useState<User | null>(null);
   const [touristId, setTouristId] = useState<TouristId | null>(null);
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
-  // Get user location on app start
+  // Hydrate from session on load
+  useEffect(() => {
+    const s = getSession();
+    if (s?.userId) {
+      setUser({ phone: s.userId, isGuest: false });
+    }
+  }, []);
+
+  // Geolocation
   useEffect(() => {
     if (navigator.geolocation) {
       navigator.geolocation.getCurrentPosition(
         (position) => {
-          setUserLocation({
-            lat: position.coords.latitude,
-            lng: position.coords.longitude
-          });
-          console.log('User location obtained');
+          setUserLocation({ lat: position.coords.latitude, lng: position.coords.longitude });
         },
-        (_error) => {
-          // Default to Goa coordinates if location access denied
-          console.log('Location access denied, using default location');
-          setUserLocation({ lat: 15.2993, lng: 74.1240 });
-        }
+        () => setUserLocation({ lat: 15.2993, lng: 74.1240 }) // Goa fallback
       );
     } else {
       setUserLocation({ lat: 15.2993, lng: 74.1240 });
     }
   }, []);
 
-  // Check for valid Tourist ID and determine mode
+  // Activated mode check
   const isActivatedMode =
-    touristId && touristId.status === 'active' && new Date() < touristId.validUntil;
+    !!touristId && touristId.status === 'active' && new Date() < touristId.validUntil;
 
-  // Navigation handlers
-  const handleLanguageSelect = (language: string) => {
-    setCurrentLanguage(language);
-    console.log('Language set to:', language);
-  };
+  // Handlers
+  const handleLanguageSelect = (language: string) => setCurrentLanguage(language);
 
   const handleLogin = (phoneOrEmail: string) => {
+    setSession(phoneOrEmail);
     setUser({ phone: phoneOrEmail, isGuest: false });
     navigate('/home');
   };
 
+  function handleLogout() {
+    clearUserPidData(); // remove current user's PID keys
+    clearSession();     // remove session
+    setUser(null);
+    navigate('/login');
+  }
+
   const handleGuestMode = () => {
+    clearSession(); // ensure no session persists
     setUser({ phone: '', isGuest: true });
     navigate('/home');
   };
 
   const handlePersonalIdComplete = (idData: any) => {
-    if (user) {
-      setUser({ ...user, personalId: idData });
-    }
+    if (user) setUser({ ...user, personalId: idData });
     navigate('/home');
   };
 
   const handleTouristIdGenerated = (newTouristId: any) => {
-    const touristIdWithDetails: TouristId = {
-      ...newTouristId,
-      holderName: user?.isGuest ? 'Guest User' : 'Raul Handa', // Example; replace with profile data
-    };
+    const holderName = user?.isGuest ? 'Guest User' : (user?.phone || 'User');
+    const touristIdWithDetails: TouristId = { ...newTouristId, holderName };
     setTouristId(touristIdWithDetails);
     navigate('/activated-mode');
   };
 
-  const handleSOSActivation = () => {
-    navigate('/sos-emergency');
-  };
-
-  const handleSOSCancel = () => {
-    navigate(isActivatedMode ? '/activated-mode' : '/home');
-  };
-
+  const handleSOSActivation = () => navigate('/sos-emergency');
+  const handleSOSCancel = () => navigate(isActivatedMode ? '/activated-mode' : '/home');
   const handleSOSEscalate = () => {
-    console.log('SOS escalated to ERSS-112');
-    alert('Connecting to Emergency Services (112)...\n\nIn a real emergency, this would:\n• Open the official 112 India app\n• Share your location with authorities\n• Connect you to emergency services');
+    alert('Connecting to Emergency Services (112)...');
     navigate(isActivatedMode ? '/activated-mode' : '/home');
   };
 
   const handleNavigateToSection = (section: string) => {
     switch (section) {
-      case 'personal-id':
-        navigate('/personal-id-creation');
+      case 'personal-id': {
+        const pid = getUserItem('pid_personal_id');
+        navigate(pid ? '/personal-id-details' : '/personal-id-creation');
         break;
+      }
       case 'plan-journey':
         navigate('/journey-planning');
         break;
@@ -147,47 +155,37 @@ function Router() {
       case 'track-location':
         navigate('/map');
         break;
-      case 'family-circle':
-        alert('Family Circle feature would allow:\n• Real-time location sharing with trusted contacts\n• Offline peer-to-peer communication via WebRTC\n• Emergency notifications to family members\n• Group safety check-ins');
-        break;
       case 'guide-chatbot':
         navigate('/guide-chatbot');
         break;
       default:
-        console.log('Navigation to:', section);
+        break;
     }
   };
 
   const handleGeofenceAlert = (geofence: any) => {
-    console.log('Geofence alert:', geofence);
     if (geofence.type === 'danger') {
-      alert(`⚠️ Safety Alert!\n\nYou are entering: ${geofence.name}\n${geofence.description}\n\nPlease exercise caution and consider alternative routes.`);
+      alert(`Safety Alert!\n\nEntering: ${geofence.name}\n${geofence.description}`);
     }
   };
 
-  // Auto-redirect logic
+  // Default redirect
   useEffect(() => {
-    if (location === '/' && !user) {
-      navigate('/language-select');
-    } else if (location === '/' && user) {
-      navigate(isActivatedMode ? '/activated-mode' : '/home');
-    }
+    if (location === '/' && !user) navigate('/language-select');
+    else if (location === '/' && user) navigate(isActivatedMode ? '/activated-mode' : '/home');
   }, [location, user, isActivatedMode, navigate]);
+
+  // Read user-scoped applicationId for docs route
+  const applicationId = getUserItem('pid_application_id') || '';
 
   return (
     <Switch>
       <Route path="/language-select">
-        <LanguageSelector
-          onLanguageSelect={handleLanguageSelect}
-          onContinue={() => navigate('/login')}
-        />
+        <LanguageSelector onLanguageSelect={handleLanguageSelect} onContinue={() => navigate('/login')} />
       </Route>
 
       <Route path="/login">
-        <AuthScreen
-          onLogin={handleLogin}
-          onGuestMode={handleGuestMode}
-        />
+        <AuthScreen onLogin={handleLogin} onGuestMode={handleGuestMode} />
       </Route>
 
       <Route path="/home">
@@ -195,6 +193,26 @@ function Router() {
           userPhone={user?.phone}
           isGuest={user?.isGuest}
           onNavigate={handleNavigateToSection}
+          onLogout={handleLogout}
+        />
+      </Route>
+
+      <Route path="/personal-id-creation">
+        <PersonalIdCreation onComplete={handlePersonalIdComplete} onBack={() => navigate('/home')} />
+      </Route>
+
+      <Route path="/personal-id-docs">
+        <PersonalIdDocsUpload
+          applicationId={applicationId}
+          onBack={() => navigate('/personal-id-creation')}
+          onDone={() => navigate('/home')}
+        />
+      </Route>
+
+      <Route path="/personal-id-details">
+        <PersonalIdDetails
+          onBack={() => navigate('/home')}
+          onShowQr={() => navigate('/qr-code')}
         />
       </Route>
 
@@ -210,6 +228,7 @@ function Router() {
             userPhone={user?.phone}
             isGuest={user?.isGuest}
             onNavigate={handleNavigateToSection}
+            onLogout={handleLogout}
           />
         )}
       </Route>
@@ -219,13 +238,6 @@ function Router() {
           userLocation={userLocation || undefined}
           onCancel={handleSOSCancel}
           onEscalate={handleSOSEscalate}
-        />
-      </Route>
-
-      <Route path="/personal-id-creation">
-        <PersonalIdCreation
-          onComplete={handlePersonalIdComplete}
-          onBack={() => navigate('/home')}
         />
       </Route>
 
@@ -244,9 +256,7 @@ function Router() {
       </Route>
 
       <Route path="/feedback">
-        <FeedbackSystem
-          onBack={() => navigate(isActivatedMode ? '/activated-mode' : '/home')}
-        />
+        <FeedbackSystem onBack={() => navigate(isActivatedMode ? '/activated-mode' : '/home')} />
       </Route>
 
       <Route path="/leaderboard">
@@ -294,7 +304,7 @@ function Router() {
             <GuideChatbot
               language={currentLanguage}
               userLocation={userLocation || undefined}
-              onLocationRequest={() => console.log('Location requested')}
+              onLocationRequest={() => {}}
             />
           </div>
         </div>
@@ -317,24 +327,18 @@ function Router() {
         </div>
       </Route>
 
-      {/* Default route - redirect to appropriate screen */}
+      {/* Default route */}
       <Route>
         {!user ? (
-          <LanguageSelector
-            onLanguageSelect={handleLanguageSelect}
-            onContinue={() => navigate('/login')}
-          />
+          <LanguageSelector onLanguageSelect={handleLanguageSelect} onContinue={() => navigate('/login')} />
         ) : isActivatedMode ? (
-          <ActivatedTourMode
-            touristId={touristId!}
-            onSOS={handleSOSActivation}
-            onNavigate={handleNavigateToSection}
-          />
+          <ActivatedTourMode touristId={touristId!} onSOS={handleSOSActivation} onNavigate={handleNavigateToSection} />
         ) : (
           <HomeScreen
             userPhone={user?.phone}
             isGuest={user?.isGuest}
             onNavigate={handleNavigateToSection}
+            onLogout={handleLogout}
           />
         )}
       </Route>

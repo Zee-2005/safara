@@ -24,7 +24,7 @@ app.use((err: any, _req: any, res: any, _next: any) => {
   console.error(err); // helpful during dev
   // Map common Mongo duplicate key to 409
   const isDupKey = err?.name === 'MongoServerError' && (err?.code === 11000);
-  const status = err?.status || (isDupKey ? 409 : 500);
+  const status = err?.status || (err?.code === 'LIMIT_FILE_SIZE' ? 413 : 500);
   const message = err?.message || (isDupKey ? 'Duplicate key' : 'Server Error');
   res.status(status).json({ error: message });
 });

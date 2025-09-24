@@ -48,3 +48,6 @@ Thumbs.db
 # Keep ORM migrations tracked (Drizzle)
 # Do NOT ignore drizzle/ migrations or meta; commit them
 # drizzle/
+
+
+ secure_storage/
