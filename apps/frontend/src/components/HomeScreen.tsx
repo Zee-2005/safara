@@ -5,17 +5,28 @@ import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import {
   Shield, MapPin, Heart, MessageSquare, Trophy, ChevronRight,
-  User, Settings, CheckCircle, Copy, LogOut
+  User, Settings, CheckCircle, Copy, LogOut, Bell
 } from 'lucide-react';
 import { getSession, getUserItem } from '@/lib/session';
 import { readTripDraft, clearTripDraft } from '@/lib/trip';
+import { getMyTrips } from '@/lib/tourist.service';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 
 interface HomeScreenProps {
   userPhone?: string;
   isGuest?: boolean;
   onNavigate: (section: string) => void;
-  onLogout?: () => void; // NEW
+  onLogout?: () => void;
 }
+
+type TripItem = {
+  tid: string;
+  status: 'active' | 'scheduled' | 'expired';
+  startDate: string;
+  endDate: string;
+  destination: string | null;
+  travelerType: 'indian' | 'international';
+};
 
 export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onLogout }: HomeScreenProps) {
   const s = getSession();
@@ -27,15 +38,30 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
   // Trip draft preview (from TripPlanner)
   const [tripDraft, setTripDraft] = useState<ReturnType<typeof readTripDraft> | null>(null);
 
+  // Backend trips for header bell
+  const [trips, setTrips] = useState<TripItem[]>([]);
+  const [showTrips, setShowTrips] = useState(false);
+
   useEffect(() => {
     setPersonalId(getUserItem('pid_personal_id', s));
     setFullName(getUserItem('pid_full_name', s));
     setMobile(getUserItem('pid_mobile', s));
     setEmail(getUserItem('pid_email', s));
     const d = readTripDraft();
-    // consider a draft “present” if it has an end date or destination/itinerary/mode set
     if (d.endDate || d.destination || d.itinerary || d.mode) setTripDraft(d);
   }, [s]);
+
+  useEffect(() => {
+    if (isGuest) return;
+    (async () => {
+      try {
+        const data = await getMyTrips();
+        setTrips((data?.trips || []) as TripItem[]);
+      } catch {
+        // silent fail for now
+      }
+    })();
+  }, [isGuest]);
 
   const sections = [
     { id: 'personal-id', title: 'Create Personal ID', description: 'Verify your identity for secure travel', icon: Shield, status: isGuest ? 'disabled' : 'available', color: 'bg-safety-blue', badge: isGuest ? null : 'Required' },
@@ -52,7 +78,6 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
       else onNavigate('personal-id');
       return;
     }
-    // Plan Journey routes to TripPlanner in App.tsx
     onNavigate(id);
   };
 
@@ -67,6 +92,10 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
   const resumeTrip = () => onNavigate('plan-journey');
   const clearTrip = () => { clearTripDraft(); setTripDraft(null); };
 
+  const active = trips.filter(t => t.status === 'active');
+  const upcoming = trips.filter(t => t.status === 'scheduled');
+  const bellCount = active.length + upcoming.length;
+
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-card border-b p-4">
@@ -76,6 +105,18 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
             <p className="text-sm text-muted-foreground">{isGuest ? 'Guest Mode' : `Welcome, +91 ${userPhone}`}</p>
           </div>
           <div className="flex items-center gap-2">
+            {!isGuest && (
+              <Button size="icon" variant="ghost" onClick={() => setShowTrips(true)} title="Trips">
+                <div className="relative">
+                  <Bell className="w-5 h-5" />
+                  {bellCount > 0 && (
+                    <span className="absolute -top-1 -right-1 rounded-full bg-primary text-primary-foreground text-[10px] px-1">
+                      {bellCount}
+                    </span>
+                  )}
+                </div>
+              </Button>
+            )}
             {!isGuest && (
               <Button size="icon" variant="ghost" data-testid="button-profile">
                 <User className="w-5 h-5" />
@@ -102,7 +143,7 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
       </div>
 
       <div className="p-4 space-y-4">
-        {/* Trip draft quick access
+        {/* Trip draft quick access (optional – re-enable if desired)
         {tripDraft && (
           <Card className="p-6">
             <div className="flex items-center justify-between">
@@ -221,6 +262,32 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
           </p>
         </Card>
       </div>
+
+      {/* Trips dialog */}
+      <Dialog open={showTrips} onOpenChange={setShowTrips}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Your trips</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-3">
+            {[...active, ...upcoming].map(t => (
+              <div key={t.tid} className="p-3 rounded-md border">
+                <div className="flex items-center justify-between">
+                  <div className="font-medium">{t.destination || 'Undisclosed'}</div>
+                  <Badge variant={t.status === 'active' ? 'secondary' : 'outline'}>{t.status}</Badge>
+                </div>
+                <div className="text-sm text-muted-foreground">
+                  {t.startDate} → {t.endDate} • {t.travelerType.toUpperCase()}
+                </div>
+                <div className="text-xs text-muted-foreground mt-1">TID: {t.tid}</div>
+              </div>
+            ))}
+            {active.length === 0 && upcoming.length === 0 && (
+              <div className="text-sm text-muted-foreground">No active or upcoming trips.</div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

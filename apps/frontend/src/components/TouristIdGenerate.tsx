@@ -1,18 +1,61 @@
 // src/components/TouristIdGenerate.tsx
+import { useState } from 'react';
 import { Card } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { readTripDraft } from '@/lib/trip';
 import { useLocation } from 'wouter';
+import { getUserItem } from '@/lib/session';
+import { createTrip } from '@/lib/tourist.service';
+
 
 export default function TouristIdGenerate() {
   const [, navigate] = useLocation();
+  const [loading, setLoading] = useState(false);
   const trip = readTripDraft();
+  const start: Date | null = trip.startNow
+  ? new Date()
+  : (trip.startDate ? new Date(trip.startDate) : null);
+  const end: Date | null = trip.endDate ? new Date(trip.endDate) : null;
 
-  const days = trip.startDate && trip.endDate
-    ? Math.max(1, Math.ceil((new Date(trip.endDate).getTime() - new Date(trip.startDate).getTime()) / (1000*60*60*24)))
-    : undefined;
+const days: number | null =
+  start && end
+    ? Math.max(1, Math.ceil((end.getTime() - start.getTime()) / 86_400_000)) // 86,400,000 ms/day
+    : null;
 
+  async function handleGenerate() {
+  try {
+    setLoading(true);
+    // Use the Mongo ObjectId stored at login / PID flow
+    const pidApplicationId = getUserItem('pid_application_id'); // <-- this is ObjectId
+    if (!pidApplicationId) {
+      alert('Personal ID not found. Please complete Personal ID first.');
+      return;
+    }
+
+    const startDate = trip.startNow ? new Date().toISOString().slice(0,10) : (trip.startDate || '');
+    const endDate = trip.endDate || '';
+
+    const res = await createTrip({
+      holderPid: pidApplicationId, // <-- send ObjectId reference
+      startDate,
+      endDate,
+      destination: trip.destination || null,
+      itinerary: trip.itinerary || null,
+      agencyId: trip.agencyId || null,
+      homeCity: trip.homeCity || null,
+      travelerType: 'indian',
+    });
+
+    localStorage.setItem('current_tid', res.tid);
+    localStorage.setItem('current_tid_status', res.status);
+    navigate('/tourist-id-docs');
+  } catch (e: any) {
+    alert(e?.message || 'Failed to create Tourist ID');
+  } finally {
+    setLoading(false);
+  }
+}
   return (
     <div className="min-h-screen bg-background">
       <div className="bg-card border-b p-4">
@@ -62,9 +105,9 @@ export default function TouristIdGenerate() {
           </div>
 
           <div className="flex gap-2">
-            <Button variant="outline" onClick={() => navigate('/plan-trip')}>Edit</Button>
-            <Button disabled>Generate ID (coming soon)</Button>
-          </div>
+      <Button variant="outline" onClick={() => navigate('/plan-trip')}>Edit</Button>
+      <Button onClick={handleGenerate} disabled={loading}>{loading ? 'Creating…' : 'Generate ID'}</Button>
+    </div>
         </Card>
       </div>
     </div>

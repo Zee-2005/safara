@@ -38,6 +38,7 @@ import AgencyBrowse from '@/components/AgencyBrowse';
 import DirectIdQuick from '@/components/DirectIdQuick';
 import TouristIdGenerate from '@/components/TouristIdGenerate';
 
+import TouristIdDocs from '@/components/TouristIdDocs';
 // Types
 interface User {
   phone: string;
@@ -88,6 +89,27 @@ function Router() {
       setUserLocation({ lat: 15.2993, lng: 74.1240 });
     }
   }, []);
+
+  useEffect(() => {
+  const id = getUserItem('tourist_id');
+  const start = getUserItem('tourist_id_start');
+  const end = getUserItem('tourist_id_end');
+  const dest = getUserItem('tourist_id_destination');
+  const status = getUserItem('tourist_id_status') as 'active' | 'scheduled' | 'expired' | null;
+  const created = getUserItem('tourist_id_created');
+  if (id && status) {
+    setTouristId({
+      id,
+      destination: dest || '',
+      validUntil: end ? new Date(end) : new Date(),
+      status,
+      holderName: user?.isGuest ? 'Guest User' : (user?.phone || 'User'),
+      issueDate: created ? new Date(created) : new Date(),
+      itinerary: getUserItem('tourist_id_itinerary') || '',
+      agency: getUserItem('tourist_id_agency') || '',
+    } as any);
+  }
+}, [user]);
 
   // Activated mode check
   const isActivatedMode =
@@ -236,6 +258,9 @@ function Router() {
       <Route path="/tourist-id-generate">
         <TouristIdGenerate />
       </Route>
+      <Route path="/tourist-id-docs">
+  <TouristIdDocs />
+</Route>
 
       <Route path="/activated-mode">
         {isActivatedMode && touristId ? (
