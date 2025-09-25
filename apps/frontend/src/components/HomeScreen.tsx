@@ -42,6 +42,8 @@ export default function HomeScreen({ userPhone, isGuest = false, onNavigate, onL
   const [trips, setTrips] = useState<TripItem[]>([]);
   const [showTrips, setShowTrips] = useState(false);
 
+
+  
   useEffect(() => {
     setPersonalId(getUserItem('pid_personal_id', s));
     setFullName(getUserItem('pid_full_name', s));

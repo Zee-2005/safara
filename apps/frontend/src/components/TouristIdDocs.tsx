@@ -52,7 +52,7 @@ export default function TouristIdDocs() {
       navigate('/activated-mode');
     } else {
       navigate('/home');
-    }
+    } 
   } catch (e: any) {
     alert(e?.message || 'Failed to upload documents');
   }

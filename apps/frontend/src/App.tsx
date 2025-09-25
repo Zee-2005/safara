@@ -38,6 +38,7 @@ import AgencyBrowse from '@/components/AgencyBrowse';
 import DirectIdQuick from '@/components/DirectIdQuick';
 import TouristIdGenerate from '@/components/TouristIdGenerate';
 
+import { getMyTrips } from '@/lib/tourist.service';
 import TouristIdDocs from '@/components/TouristIdDocs';
 // Types
 interface User {
@@ -67,6 +68,36 @@ function Router() {
   const [currentLanguage, setCurrentLanguage] = useState('en');
   const [user, setUser] = useState<User | null>(null);
   const [touristId, setTouristId] = useState<TouristId | null>(null);
+
+  useEffect(() => {
+  let cancelled = false;
+  (async () => {
+    if (!user) return;
+    try {
+      const data = await getMyTrips();
+      const active = (data.trips || []).find(t => t.status === 'active');
+      if (!active || cancelled) return;
+
+      // Hydrate touristId state for ActivatedTourMode
+      setTouristId({
+        id: active.tid,
+        destination: active.destination || '',
+        validUntil: active.endDate ? new Date(active.endDate) : new Date(),
+        status: 'active',
+        holderName: user.isGuest ? 'Guest User' : (user.phone || 'User'),
+        issueDate: new Date(), // server createdAt optional to map
+        itinerary: undefined,
+        agency: undefined,
+      } as any);
+
+      // Navigate to active mode
+      navigate('/activated-mode');
+    } catch {
+      // ignore
+    }
+  })();
+  return () => { cancelled = true; };
+}, [user]); // runs on login/refresh
   const [userLocation, setUserLocation] = useState<{ lat: number; lng: number } | null>(null);
   const [isMapFullscreen, setIsMapFullscreen] = useState(false);
 
