@@ -1,374 +1,287 @@
-import { useState, useEffect, useRef } from 'react';
-import { Button } from '@/components/ui/button';
+// src/components/GuideChatbot.tsx
+import React, { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { Card } from '@/components/ui/card';
+import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Badge } from '@/components/ui/badge';
-import { 
-  MessageCircle, 
-  Send, 
-  Bot, 
-  User, 
-  Languages,
-  MapPin,
-  FileText,
-  AlertCircle,
-  Mic,
-  MicOff
-} from 'lucide-react';
+import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip';
+import { Mic, MicOff, Send, MapPin, Loader, Bot, User } from 'lucide-react';
 
-interface Message {
-  id: string;
-  content: string;
-  sender: 'user' | 'bot';
-  timestamp: Date;
-  type?: 'text' | 'location' | 'document';
-}
-
-interface GuideChatbotProps {
+type Props = {
   language?: string;
   userLocation?: { lat: number; lng: number };
   onLocationRequest?: () => void;
+};
+
+// Prefer env, but fall back to the provided key to match the legacy engine
+const GEMINI_KEY =
+  (import.meta as any).env?.VITE_GEMINI_API_KEY ||
+  'AIzaSyA5gJDHaYhugMU1H-IoMpGUoJDaO9-Ipl8';
+
+const API_URL = `https://generativelanguage.googleapis.com/v1beta/models/gemini-1.5-flash-latest:generateContent?key=${GEMINI_KEY}`;
+
+type ChatMsg = { role: 'user' | 'ai'; text: string; ts: number };
+const msPerDay = 86_400_000;
+
+function nowIsoDate() {
+  return new Date().toISOString();
 }
 
-export default function GuideChatbot({ 
-  language = 'en', 
-  userLocation,
-  onLocationRequest 
-}: GuideChatbotProps) {
-  const [messages, setMessages] = useState<Message[]>([]);
-  const [inputValue, setInputValue] = useState('');
-  const [isTyping, setIsTyping] = useState(false);
-  const [isListening, setIsListening] = useState(false);
-  const messagesEndRef = useRef<HTMLDivElement>(null);
+function buildPrompt(input: string, language?: string, loc?: { lat: number; lng: number }) {
+  const localeLine = language ? `User language: ${language}` : 'User language: en';
+  const locLine = loc ? `User location: lat=${loc.lat}, lng=${loc.lng}` : 'User location: unknown';
+  const system = [
+    'Act as SaFara Guide: a concise, friendly travel assistant focused on tourist safety, logistics, and local help.', 
+    'Be direct, avoid fluff, and provide step-by-step guidance when relevant.',
+  ].join(' ');
+  return [
+    `${system}`,
+    `${localeLine}`,
+    `${locLine}`,
+    `User: ${input}`,
+  ].join('\n');
+}
 
-  // Mock initial message
+async function askGemini(prompt: string) {
+  const res = await fetch(API_URL, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }],
+        },
+      ],
+      generationConfig: {
+        temperature: 0.6,
+        topP: 0.9,
+        topK: 40,
+        maxOutputTokens: 512,
+      },
+    }),
+  });
+  if (!res.ok) {
+    let message = `${res.status} ${res.statusText}`;
+    try {
+      const json = await res.json();
+      message = json?.error?.message || message;
+    } catch {}
+    throw new Error(message);
+  }
+  const data = await res.json();
+  const text =
+    data?.candidates?.[0]?.content?.parts
+      ?.map((p: any) => p?.text)
+      ?.filter(Boolean)
+      ?.join(' ')
+      ?.trim() || 'Sorry, no response available.';
+  return text;
+}
+
+export default function GuideChatbot({ language, userLocation, onLocationRequest }: Props) {
+  const [messages, setMessages] = useState<ChatMsg[]>([
+    {
+      role: 'ai',
+      text: 'Hi! How can I help with today’s trip, safety, or plans?',
+      ts: Date.now(),
+    },
+  ]);
+  const [input, setInput] = useState('');
+  const [loading, setLoading] = useState(false);
+
+  // Speech recognition
+  const [micReady, setMicReady] = useState(false);
+  const [micActive, setMicActive] = useState(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+
+  // Scroll to bottom on new messages
+  const endRef = useRef<HTMLDivElement | null>(null);
   useEffect(() => {
-    const initialMessage: Message = {
-      id: '1',
-      content: `Hello! I'm your SaFara guide assistant. I can help you with:
-      
-• Local safety information and restrictions
-• Permits and documentation requirements  
-• Emergency procedures and contacts
-• Cultural guidelines and customs
-• Weather and travel conditions
+    endRef.current?.scrollIntoView({ behavior: 'smooth' });
+  }, [messages.length, loading]);
 
-How can I assist you today?`,
-      sender: 'bot',
-      timestamp: new Date(),
-      type: 'text'
-    };
-    setMessages([initialMessage]);
+  // Init SpeechRecognition (only on supported browsers)
+  useEffect(() => {
+  const SR: any = (window as any).SpeechRecognition || (window as any).webkitSpeechRecognition;
+  if (!SR) {
+    setMicReady(false);
+    return;
+  }
+  const recog: SpeechRecognition = new SR();
+  recog.continuous = false;
+  recog.interimResults = false;
+  recog.lang = (language || 'en').startsWith('hi') ? 'hi-IN' : 'en-IN';
+  recog.onresult = (e) => {
+    const idx = e.resultIndex;
+    const transcript = e.results?.[idx]?.[0]?.transcript || '';
+    if (transcript) {
+      setInput(transcript);
+      setTimeout(() => { handleSend(transcript); }, 100);
+    }
+    setMicActive(false);
+  };
+  recog.onerror = () => setMicActive(false);
+  recog.onend = () => setMicActive(false);
+  recognitionRef.current = recog;
+  setMicReady(true);
+  return () => {
+    try { recog.abort(); } catch {}
+    recognitionRef.current = null;
+  };
+}, [language]);
+
+
+  const startMic = useCallback(() => {
+    if (!recognitionRef.current || micActive) return;
+    try {
+      recognitionRef.current.start();
+      setMicActive(true);
+    } catch {
+      setMicActive(false);
+    }
+  }, [micActive]);
+
+  const stopMic = useCallback(() => {
+    try {
+      recognitionRef.current?.stop();
+    } catch {}
+    setMicActive(false);
   }, []);
 
-  useEffect(() => {
-    scrollToBottom();
-  }, [messages]);
+  const canSend = useMemo(() => !loading && input.trim().length > 0, [loading, input]);
 
-  const scrollToBottom = () => {
-    messagesEndRef.current?.scrollIntoView({ behavior: 'smooth' });
-  };
+  const handleSend = useCallback(
+    async (textOverride?: string) => {
+      const userText = (textOverride ?? input).trim();
+      if (!userText || loading) return;
 
-  // Mock responses based on common tourist queries
-  const generateBotResponse = (userMessage: string): string => {
-    const lowerMessage = userMessage.toLowerCase();
-    
-    if (lowerMessage.includes('emergency') || lowerMessage.includes('help') || lowerMessage.includes('sos')) {
-      return `🚨 **Emergency Information:**
+      // push user message
+      setMessages((prev) => [...prev, { role: 'user', text: userText, ts: Date.now() }]);
+      setInput('');
+      setLoading(true);
 
-• **India Emergency Number**: 112 (Police, Fire, Medical)
-• **Tourist Helpline**: 1363
-• **Your nearest police station**: Goa Tourism Police - +91-832-2421024
-
-If this is an active emergency, please use the SOS button in your SaFara app immediately.`;
-    }
-    
-    if (lowerMessage.includes('permit') || lowerMessage.includes('document')) {
-      return `📄 **Permit & Documentation:**
-
-For Goa Tourism:
-• Valid Photo ID (Aadhaar, Passport, Driving License)
-• No special permits required for general tourism
-• For water sports: Safety briefing mandatory
-• For heritage sites: Some may require entry tickets
-
-Your SaFara Tourist ID provides additional verification when needed.`;
-    }
-    
-    if (lowerMessage.includes('safety') || lowerMessage.includes('secure') || lowerMessage.includes('safe')) {
-      return `🛡️ **Safety Guidelines:**
-
-• Stay in well-lit, populated areas after sunset
-• Keep copies of important documents
-• Inform someone about your travel plans
-• Use registered taxis or ride-sharing apps
-• Avoid displaying expensive items
-• Stay hydrated and use sunscreen
-
-Your SaFara app is monitoring nearby safety zones for you.`;
-    }
-    
-    if (lowerMessage.includes('weather') || lowerMessage.includes('climate')) {
-      return `🌤️ **Current Weather Info:**
-
-Goa (Today):
-• Temperature: 28-32°C
-• Humidity: 78%
-• Monsoon season: June-September
-• Best time to visit: Oct-March
-
-⚠️ Check local weather alerts in your SaFara app for real-time updates.`;
-    }
-    
-    if (lowerMessage.includes('culture') || lowerMessage.includes('custom') || lowerMessage.includes('tradition')) {
-      return `🙏 **Cultural Guidelines:**
-
-• Dress modestly when visiting temples
-• Remove shoes before entering religious places
-• Ask permission before photographing people
-• Respect local customs and traditions
-• Learn basic local greetings
-• Tipping: 10% at restaurants is customary
-
-Would you like specific cultural information for your current location?`;
-    }
-    
-    // Default response
-    return `I understand you're asking about "${userMessage}". 
-
-I can provide detailed information about:
-• Safety protocols and emergency contacts
-• Local permits and required documentation
-• Cultural customs and guidelines
-• Weather conditions and travel advisories
-• Nearby tourist services and facilities
-
-Could you please be more specific about what information you need?`;
-  };
-
-  const handleSendMessage = async () => {
-    if (!inputValue.trim()) return;
-
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      content: inputValue,
-      sender: 'user',
-      timestamp: new Date(),
-      type: 'text'
-    };
-
-    setMessages(prev => [...prev, userMessage]);
-    setInputValue('');
-    setIsTyping(true);
-
-    // Simulate AI processing delay
-    setTimeout(() => {
-      const botResponse: Message = {
-        id: (Date.now() + 1).toString(),
-        content: generateBotResponse(inputValue),
-        sender: 'bot',
-        timestamp: new Date(),
-        type: 'text'
-      };
-      
-      setMessages(prev => [...prev, botResponse]);
-      setIsTyping(false);
-      console.log('Bot response sent:', botResponse.content);
-    }, 1500);
-  };
-
-  const handleVoiceToggle = () => {
-    setIsListening(!isListening);
-    console.log(isListening ? 'Stopped listening' : 'Started listening');
-    // In real implementation, this would use Web Speech API
-  };
-
-  const handleQuickAction = (action: string) => {
-    let message = '';
-    switch (action) {
-      case 'emergency':
-        message = 'What should I do in an emergency?';
-        break;
-      case 'permits':
-        message = 'What permits do I need for tourism here?';
-        break;
-      case 'safety':
-        message = 'What safety precautions should I take?';
-        break;
-      case 'culture':
-        message = 'Tell me about local customs and culture';
-        break;
-    }
-    
-    setInputValue(message);
-  };
-
-  const formatMessageContent = (content: string) => {
-    // Simple markdown-like formatting
-    return content
-      .split('\n')
-      .map((line, index) => {
-        if (line.startsWith('• ')) {
-          return <li key={index} className="ml-4">{line.substring(2)}</li>;
-        }
-        if (line.startsWith('**') && line.endsWith('**')) {
-          return <div key={index} className="font-semibold mt-2 mb-1">{line.slice(2, -2)}</div>;
-        }
-        if (line.trim() === '') {
-          return <br key={index} />;
-        }
-        return <div key={index}>{line}</div>;
-      });
-  };
+      try {
+        const prompt = buildPrompt(userText, language, userLocation);
+        const aiText = await askGemini(prompt);
+        setMessages((prev) => [...prev, { role: 'ai', text: aiText, ts: Date.now() }]);
+      } catch (err: any) {
+        setMessages((prev) => [
+          ...prev,
+          {
+            role: 'ai',
+            text: `Sorry, I couldn’t fetch a reply (${err?.message || 'unknown error'}).`,
+            ts: Date.now(),
+          },
+        ]);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [input, loading, language, userLocation]
+  );
 
   return (
-    <div className="flex flex-col h-full max-h-[600px] bg-background">
-      {/* Header */}
-      <div className="flex items-center gap-3 p-4 border-b bg-card">
-        <div className="w-10 h-10 bg-safety-blue rounded-full flex items-center justify-center">
-          <Bot className="w-5 h-5 text-white" />
-        </div>
-        <div className="flex-1">
-          <h3 className="font-semibold">SaFara Guide</h3>
-          <div className="flex items-center gap-2">
-            <Badge variant="secondary" className="text-xs">
-              <Languages className="w-3 h-3 mr-1" />
-              {language.toUpperCase()}
-            </Badge>
-            {userLocation && (
-              <Badge variant="outline" className="text-xs">
-                <MapPin className="w-3 h-3 mr-1" />
-                Goa
-              </Badge>
-            )}
-          </div>
-        </div>
-        <Badge className="bg-safety-green text-white">Online</Badge>
-      </div>
-
-      {/* Messages */}
-      <div className="flex-1 overflow-y-auto p-4 space-y-4">
-        {messages.map((message) => (
-          <div
-            key={message.id}
-            className={`flex gap-3 ${
-              message.sender === 'user' ? 'justify-end' : 'justify-start'
-            }`}
-          >
-            {message.sender === 'bot' && (
-              <div className="w-8 h-8 bg-safety-blue rounded-full flex items-center justify-center flex-shrink-0">
-                <Bot className="w-4 h-4 text-white" />
-              </div>
-            )}
-            
+    <div className="h-full flex flex-col">
+      {/* Chat thread */}
+      <div className="flex-1 overflow-y-auto p-4 space-y-3">
+        {messages.map((m, idx) => (
+          <div key={m.ts + '-' + idx} className="flex items-start gap-2">
             <div
-              className={`max-w-[80%] rounded-lg p-3 ${
-                message.sender === 'user'
-                  ? 'bg-primary text-primary-foreground'
-                  : 'bg-muted'
+              className={`w-8 h-8 rounded-full flex items-center justify-center ${
+                m.role === 'ai' ? 'bg-safety-blue/10' : 'bg-safety-green/10'
               }`}
             >
-              <div className="text-sm">
-                {formatMessageContent(message.content)}
-              </div>
-              <div className="text-xs opacity-70 mt-1">
-                {message.timestamp.toLocaleTimeString([], { 
-                  hour: '2-digit', 
-                  minute: '2-digit' 
-                })}
-              </div>
+              {m.role === 'ai' ? <Bot className="w-4 h-4 text-safety-blue" /> : <User className="w-4 h-4 text-safety-green" />}
             </div>
-
-            {message.sender === 'user' && (
-              <div className="w-8 h-8 bg-muted rounded-full flex items-center justify-center flex-shrink-0">
-                <User className="w-4 h-4" />
-              </div>
-            )}
+            <Card className={`px-3 py-2 max-w-[80%] ${m.role === 'ai' ? '' : 'ml-auto'}`}>
+              <div className="whitespace-pre-wrap text-sm">{m.text}</div>
+            </Card>
           </div>
         ))}
 
-        {isTyping && (
-          <div className="flex gap-3">
-            <div className="w-8 h-8 bg-safety-blue rounded-full flex items-center justify-center flex-shrink-0">
-              <Bot className="w-4 h-4 text-white" />
+        {loading && (
+          <div className="flex items-start gap-2">
+            <div className="w-8 h-8 rounded-full flex items-center justify-center bg-safety-blue/10">
+              <Bot className="w-4 h-4 text-safety-blue" />
             </div>
-            <div className="bg-muted rounded-lg p-3">
-              <div className="flex items-center gap-1">
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce"></div>
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-100"></div>
-                <div className="w-2 h-2 bg-muted-foreground rounded-full animate-bounce delay-200"></div>
+            <Card className="px-3 py-2 max-w-[80%]">
+              <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                <Loader className="w-4 h-4 animate-spin" /> Thinking...
               </div>
-            </div>
+            </Card>
           </div>
         )}
-        <div ref={messagesEndRef} />
+
+        <div ref={endRef} />
       </div>
 
-      {/* Quick Actions */}
-      <div className="p-4 border-t bg-card/50">
-        <div className="flex flex-wrap gap-2 mb-3">
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => handleQuickAction('emergency')}
-            data-testid="button-quick-emergency"
-          >
-            <AlertCircle className="w-3 h-3 mr-1" />
-            Emergency
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => handleQuickAction('permits')}
-            data-testid="button-quick-permits"
-          >
-            <FileText className="w-3 h-3 mr-1" />
-            Permits
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => handleQuickAction('safety')}
-            data-testid="button-quick-safety"
-          >
-            Safety Tips
-          </Button>
-          <Button 
-            size="sm" 
-            variant="outline" 
-            onClick={() => handleQuickAction('culture')}
-            data-testid="button-quick-culture"
-          >
-            Culture
+      {/* Composer */}
+      <div className="border-t bg-card p-3">
+        <div className="flex items-center gap-2">
+          <TooltipProvider>
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant={micActive ? 'secondary' : 'outline'}
+                  size="icon"
+                  onClick={micActive ? stopMic : startMic}
+                  disabled={!micReady || loading}
+                >
+                  {micActive ? <Mic className="w-4 h-4" /> : <MicOff className="w-4 h-4" />}
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">{micReady ? (micActive ? 'Listening...' : 'Voice input') : 'Mic not supported'}</div>
+              </TooltipContent>
+            </Tooltip>
+
+            <Tooltip>
+              <TooltipTrigger asChild>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="icon"
+                  onClick={onLocationRequest}
+                  disabled={loading}
+                >
+                  <MapPin className="w-4 h-4" />
+                </Button>
+              </TooltipTrigger>
+              <TooltipContent>
+                <div className="text-xs">
+                  {userLocation ? `lat ${userLocation.lat.toFixed(3)}, lng ${userLocation.lng.toFixed(3)}` : 'Share location'}
+                </div>
+              </TooltipContent>
+            </Tooltip>
+          </TooltipProvider>
+
+          <Input
+            id="inp"
+            placeholder="Ask about safety, routes, places..."
+            value={input}
+            onChange={(e) => setInput(e.target.value)}
+            onKeyDown={(e) => {
+              if (e.key === 'Enter' && canSend) handleSend();
+            }}
+          />
+
+          <Button id="btn" onClick={() => handleSend()} disabled={!canSend}>
+            <Send className="w-4 h-4 mr-1" /> Send
           </Button>
         </div>
 
-        {/* Input */}
-        <div className="flex gap-2">
-          <Input
-            value={inputValue}
-            onChange={(e) => setInputValue(e.target.value)}
-            placeholder="Ask me anything about local safety, permits, or customs..."
-            onKeyPress={(e) => e.key === 'Enter' && handleSendMessage()}
-            data-testid="input-message"
-          />
-          <Button 
-            size="icon" 
-            variant="outline"
-            onClick={handleVoiceToggle}
-            className={isListening ? 'bg-safety-red text-white' : ''}
-            data-testid="button-voice"
-          >
-            {isListening ? <MicOff className="w-4 h-4" /> : <Mic className="w-4 h-4" />}
-          </Button>
-          <Button 
-            size="icon" 
-            onClick={handleSendMessage}
-            disabled={!inputValue.trim() || isTyping}
-            data-testid="button-send"
-          >
-            <Send className="w-4 h-4" />
-          </Button>
+        <div className="mt-2 flex items-center gap-2">
+          {language && <Badge variant="outline">{language.toUpperCase()}</Badge>}
+          {userLocation && (
+            <Badge variant="secondary">
+              Near {userLocation.lat.toFixed(2)}, {userLocation.lng.toFixed(2)}
+            </Badge>
+          )}
+          <div className="text-xs text-muted-foreground ml-auto">
+            {nowIsoDate().slice(0, 10)}
+          </div>
         </div>
       </div>
     </div>
