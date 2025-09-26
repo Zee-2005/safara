@@ -14,5 +14,7 @@ npm run dev --workspace=@safetrail/frontend
 
 npm run dev --workspace=@safetrail/backend
 
+npm run dev --workspace=@safetrail/authority
+
 
 
