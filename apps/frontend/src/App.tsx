@@ -296,10 +296,11 @@ function Router() {
       <Route path="/activated-mode">
         {isActivatedMode && touristId ? (
           <ActivatedTourMode
-            touristId={touristId}
-            onSOS={handleSOSActivation}
-            onNavigate={handleNavigateToSection}
-          />
+  touristId={touristId as any}
+  onSOS={handleSOSActivation}
+  onNavigate={handleNavigateToSection}
+  onLogout={handleLogout} // NEW
+/>
         ) : (
           <HomeScreen
             userPhone={user?.phone}
@@ -410,7 +411,8 @@ function Router() {
         {!user ? (
           <LanguageSelector onLanguageSelect={handleLanguageSelect} onContinue={() => navigate('/login')} />
         ) : isActivatedMode ? (
-          <ActivatedTourMode touristId={touristId!} onSOS={handleSOSActivation} onNavigate={handleNavigateToSection} />
+          <ActivatedTourMode touristId={touristId!} onSOS={handleSOSActivation} onNavigate={handleNavigateToSection}
+          onLogout={handleLogout} />
         ) : (
           <HomeScreen
             userPhone={user?.phone}

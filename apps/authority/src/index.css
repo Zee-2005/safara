@@ -1,0 +1,197 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+/* SentinelView Authority Dashboard Design System 
+All colors MUST be HSL. Professional government aesthetic.
+*/
+
+@layer base {
+  :root {
+    /* Authority Theme - Professional Government Interface */
+    --background: 218 23% 97%;
+    --foreground: 215 25% 15%;
+
+    --card: 0 0% 100%;
+    --card-foreground: 215 25% 15%;
+
+    --popover: 0 0% 100%;
+    --popover-foreground: 215 25% 15%;
+
+    /* Authority Blue - Primary Brand */
+    --primary: 214 84% 42%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 214 35% 85%;
+    --primary-dark: 214 84% 32%;
+
+    /* Secondary - Professional Gray */
+    --secondary: 210 15% 94%;
+    --secondary-foreground: 215 25% 25%;
+
+    /* Muted Backgrounds */
+    --muted: 210 15% 96%;
+    --muted-foreground: 215 15% 45%;
+
+    /* Accent - Authority Highlight */
+    --accent: 211 100% 48%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Status Colors - Critical for Authority Operations */
+    --emergency: 0 84% 50%;
+    --emergency-foreground: 0 0% 100%;
+    --emergency-muted: 0 84% 95%;
+
+    --warning: 38 92% 50%;
+    --warning-foreground: 38 30% 15%;
+    --warning-muted: 38 92% 95%;
+
+    --success: 142 76% 36%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 76% 95%;
+
+    --info: 199 89% 48%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 199 89% 95%;
+
+    --destructive: 0 84% 50%;
+    --destructive-foreground: 0 0% 100%;
+
+    /* Interface Elements */
+    --border: 214 20% 88%;
+    --input: 214 20% 88%;
+    --ring: 214 84% 42%;
+
+    --radius: 0.5rem;
+
+    /* SentinelView Gradients & Effects */
+    --gradient-authority: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--primary-dark)));
+    --gradient-emergency: linear-gradient(135deg, hsl(var(--emergency)), hsl(0 84% 40%));
+    --gradient-surface: linear-gradient(180deg, hsl(var(--background)), hsl(218 23% 94%));
+    
+    /* Authority Dashboard Shadows */
+    --shadow-authority: 0 4px 20px hsl(var(--primary) / 0.15);
+    --shadow-emergency: 0 4px 20px hsl(var(--emergency) / 0.2);
+    --shadow-card: 0 2px 10px hsl(215 25% 15% / 0.1);
+
+    --sidebar-background: 215 25% 15%;
+
+    --sidebar-foreground: 240 5.3% 26.1%;
+
+    --sidebar-primary: 240 5.9% 10%;
+
+    --sidebar-primary-foreground: 0 0% 98%;
+
+    --sidebar-accent: 240 4.8% 95.9%;
+
+    --sidebar-accent-foreground: 240 5.9% 10%;
+
+    --sidebar-border: 220 13% 91%;
+
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+
+  .dark {
+    /* Dark Mode Authority Theme */
+    --background: 215 25% 8%;
+    --foreground: 210 15% 92%;
+
+    --card: 215 25% 12%;
+    --card-foreground: 210 15% 92%;
+
+    --popover: 215 25% 12%;
+    --popover-foreground: 210 15% 92%;
+
+    /* Authority Blue - Dark Mode */
+    --primary: 214 84% 52%;
+    --primary-foreground: 0 0% 100%;
+    --primary-muted: 214 35% 25%;
+    --primary-dark: 214 84% 42%;
+
+    --secondary: 215 25% 15%;
+    --secondary-foreground: 210 15% 85%;
+
+    --muted: 215 25% 15%;
+    --muted-foreground: 215 15% 65%;
+
+    --accent: 211 100% 58%;
+    --accent-foreground: 0 0% 100%;
+
+    /* Status Colors - Dark Mode */
+    --emergency: 0 84% 60%;
+    --emergency-foreground: 0 0% 100%;
+    --emergency-muted: 0 84% 15%;
+
+    --warning: 38 92% 60%;
+    --warning-foreground: 38 30% 15%;
+    --warning-muted: 38 92% 15%;
+
+    --success: 142 76% 46%;
+    --success-foreground: 0 0% 100%;
+    --success-muted: 142 76% 15%;
+
+    --info: 199 89% 58%;
+    --info-foreground: 0 0% 100%;
+    --info-muted: 199 89% 15%;
+
+    --destructive: 0 84% 60%;
+    --destructive-foreground: 0 0% 100%;
+
+    --border: 215 25% 18%;
+    --input: 215 25% 18%;
+    --ring: 214 84% 52%;
+
+    --sidebar-background: 215 25% 10%;
+    --sidebar-foreground: 240 4.8% 95.9%;
+    --sidebar-primary: 224.3 76.3% 48%;
+    --sidebar-primary-foreground: 0 0% 100%;
+    --sidebar-accent: 240 3.7% 15.9%;
+    --sidebar-accent-foreground: 240 4.8% 95.9%;
+    --sidebar-border: 240 3.7% 15.9%;
+    --sidebar-ring: 217.2 91.2% 59.8%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground;
+  }
+}
+
+/* SentinelView Authority Components */
+@layer components {
+  .authority-gradient {
+    background: var(--gradient-authority);
+  }
+  
+  .emergency-gradient {
+    background: var(--gradient-emergency);
+  }
+  
+  .surface-gradient {
+    background: var(--gradient-surface);
+  }
+  
+  .authority-shadow {
+    box-shadow: var(--shadow-authority);
+  }
+  
+  .emergency-shadow {
+    box-shadow: var(--shadow-emergency);
+  }
+  
+  .card-shadow {
+    box-shadow: var(--shadow-card);
+  }
+  
+  .status-badge {
+    @apply px-2 py-1 rounded-full text-xs font-medium;
+  }
+  
+  .alert-pulse {
+    animation: pulse 2s cubic-bezier(0.4, 0, 0.6, 1) infinite;
+  }
+}

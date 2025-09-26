@@ -6,8 +6,8 @@
     "apps/*"
   ],
   "scripts": {
-    "dev": "npm run dev --workspace=@safetrail/frontend & npm run dev --workspace=@safetrail/backend",
-    "build": "npm run build --workspace=@safetrail/frontend && npm run build --workspace=@safetrail/backend",
+    "dev": "npm run dev --workspace=@safetrail/frontend & npm run dev --workspace=@safetrail/backend & npm run dev --workspace=@safetrail/authority",
+    "build": "npm run build --workspace=@safetrail/frontend && npm run build --workspace=@safetrail/backend && npm run build --workspace=@safetrail/authority",
     "start": "npm run start --workspace=@safetrail/backend",
     "check": "npm run check --workspace=@safetrail/backend"
   },
