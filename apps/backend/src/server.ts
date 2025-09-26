@@ -17,7 +17,19 @@ const start = async () => {
 type LatLng = { lat: number; lng: number };
 type Zone = { id: string; name: string; type: 'circle'|'polygon'; coords?: LatLng[]; radius?: number; risk?: string };
 type Boundary = { id: string; name: string; type: 'circle'|'polygon'; center?: LatLng; coords?: LatLng[]; radius?: number };
-
+type Incident = {
+  id: string;
+  touristSocketId: string;
+  touristId?: string;
+  touristName?: string;
+  touristPhone?: string;
+  location?: LatLng;
+  description?: string;
+  media?: { audio?: string; video?: string; photo?: string }; // data: URLs or hosted URLs
+  createdAt: number;
+  status: 'new' | 'acknowledged' | 'resolved';
+  officer?: { id?: string; name?: string };
+};
 // In-memory state
 const zones = new Map<string, Zone>();
 const boundaries = new Map<string, Boundary>();
@@ -25,6 +37,9 @@ const boundaries = new Map<string, Boundary>();
 // Track per-socket entry state to avoid repeated alerts
 const insideZonesBySocket = new Map<string, Set<string>>();
 const boundaryInsideBySocket = new Map<string, boolean>();
+
+const incidents = new Map<string, Incident>();
+
 
 const haversine = (a: LatLng, b: LatLng) => {
   const toRad = (x: number) => (x * Math.PI) / 180;
@@ -135,6 +150,49 @@ io.on('connection', (socket) => {
     insideZonesBySocket.delete(socket.id);
     boundaryInsideBySocket.delete(socket.id);
   });
+
+  socket.on('incident-sync', () => {
+  const list = Array.from(incidents.values()).sort((a,b) => b.createdAt - a.createdAt).slice(0, 100);
+  socket.emit('incident-list', list);
+});
+
+// Tourist creates SOS
+socket.on('sos-create', (payload: Partial<Incident>) => {
+  const id = payload.id || `${Date.now()}-${Math.random().toString(36).slice(2,8)}`;
+  const incident: Incident = {
+    id,
+    touristSocketId: socket.id,
+    touristId: payload.touristId,
+    touristName: payload.touristName,
+    touristPhone: payload.touristPhone,
+    location: payload.location,
+    description: payload.description,
+    media: payload.media,
+    createdAt: Date.now(),
+    status: 'new',
+  };
+  incidents.set(incident.id, incident);
+  io.emit('incident-new', incident);
+  socket.emit('sos-received', { id: incident.id });
+});
+
+// Dashboard acknowledges / resolves
+socket.on('incident-ack', ({ id, officer }) => {
+  const inc = incidents.get(id);
+  if (!inc) return;
+  inc.status = 'acknowledged';
+  inc.officer = officer;
+  incidents.set(id, inc);
+  io.emit('incident-updated', inc);
+});
+socket.on('incident-resolve', ({ id, notes }) => {
+  const inc = incidents.get(id);
+  if (!inc) return;
+  inc.status = 'resolved';
+  (inc as any).notes = notes;
+  incidents.set(id, inc);
+  io.emit('incident-updated', inc);
+});
 });
 
 

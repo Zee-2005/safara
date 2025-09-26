@@ -25,6 +25,20 @@ import {
 import StatsCard from "@/components/dashboard/StatsCard";
 
 // ---------------- TYPES ----------------
+interface Incident {
+  id: string;
+  touristSocketId?: string;
+  touristId?: string;
+  touristName?: string;
+  touristPhone?: string;
+  location?: { lat: number; lng: number };
+  description?: string;
+  media?: { audio?: string; video?: string; photo?: string };
+  createdAt: number;
+  status: 'new' | 'acknowledged' | 'resolved';
+  officer?: { id?: string; name?: string };
+}
+
 interface LocationData {
   id: string;
   latitude: number;
@@ -42,9 +56,9 @@ interface LiveAlert {
   type: "zone" | "incident" | "system";
 }
 interface Incident {
-  id: number | string;
+  id: string;
   type: string;
-  location: string;
+  location?: { lat: number; lng: number };
   time: string;
 }
 interface ZoneData {
@@ -172,6 +186,20 @@ const Dashboard: React.FC = () => {
     };
     socket.on("receive-location", onReceiveLocation);
     socket.on("user-disconnected", onUserDisconnected);
+
+    // INCIDENTS: sync, list, new, updated
+    socket.emit('incident-sync');
+    socket.on('incident-list', (list: Incident[]) => {
+      setRecentIncidents(list);
+      setStats((s) => ({ ...s, activeIncidents: list.filter(i => i.status !== 'resolved').length }));
+    });
+    socket.on('incident-new', (inc: Incident) => {
+      setRecentIncidents((prev) => [inc, ...prev]);
+      setLiveAlerts((prev) => [{ id: Date.now(), message: `New SOS from ${inc.touristName || inc.touristPhone || inc.touristId || 'Tourist'}`, time: new Date().toLocaleTimeString(), type: 'incident' }, ...prev]);
+    });
+    socket.on('incident-updated', (inc: Incident) => {
+      setRecentIncidents((prev) => prev.map(p => p.id === inc.id ? inc : p));
+    });
 
     // Zones and boundaries: draw helpers
     const drawZoneOnMap = (z: ZoneData) => {
@@ -415,14 +443,17 @@ const Dashboard: React.FC = () => {
 
     // Cleanup
     return () => {
-      socket.off("receive-location", onReceiveLocation);
-      socket.off("user-disconnected", onUserDisconnected);
-      socket.off("zone-update", onZoneUpdate);
-      socket.off("zone-deleted", onZoneDeleted);
-      socket.off("boundary-update", onBoundaryUpdate);
-      socket.off("boundary-deleted", onBoundaryDeleted);
-      socket.off("heatmap-update");
-      socket.off("zone-alert");
+  socket.off("receive-location", onReceiveLocation);
+  socket.off("user-disconnected", onUserDisconnected);
+  socket.off("zone-update", onZoneUpdate);
+  socket.off("zone-deleted", onZoneDeleted);
+  socket.off("boundary-update", onBoundaryUpdate);
+  socket.off("boundary-deleted", onBoundaryDeleted);
+  socket.off("heatmap-update");
+  socket.off("zone-alert");
+  socket.off('incident-list');
+  socket.off('incident-new');
+  socket.off('incident-updated');
 
       map.off(L.Draw.Event.CREATED, onDrawCreated);
       map.off(L.Draw.Event.EDITED, onDrawEdited);
@@ -535,7 +566,10 @@ const Dashboard: React.FC = () => {
                   <div className="flex items-center gap-3">
                     <span className="font-medium">{inc.type}</span>
                   </div>
-                  <p className="text-sm text-muted-foreground">{inc.location} • {inc.time}</p>
+                  <p className="text-sm text-muted-foreground">
+  {inc.location ? `${inc.location.lat}, ${inc.location.lng}` : "Unknown location"} • {inc.time}
+</p>
+
                 </div>
                 <div className="flex items-center gap-2">
                   <Button variant="outline" size="sm">View</Button>

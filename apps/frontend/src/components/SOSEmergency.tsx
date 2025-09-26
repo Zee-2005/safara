@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Button } from '@/components/ui/button';
 import { Card } from '@/components/ui/card';
 import { Textarea } from '@/components/ui/textarea';
@@ -14,6 +14,10 @@ import {
   Shield
 } from 'lucide-react';
 
+import { io, Socket } from 'socket.io-client';
+const SOCKET_URL = (import.meta as any).env?.VITE_TOURIST_SOCKET_URL as string | undefined;
+
+
 interface SOSEmergencyProps {
   userLocation?: { lat: number; lng: number };
   onCancel: () => void;
@@ -25,6 +29,17 @@ export default function SOSEmergency({ userLocation, onCancel, onEscalate }: SOS
   const [isRecording, setIsRecording] = useState(false);
   const [countdown, setCountdown] = useState(10);
   const [stage, setStage] = useState<'confirmation' | 'details' | 'escalation'>('confirmation');
+  const socketRef = useRef<Socket | null>(null);
+  const [audioBlob, setAudioBlob] = useState<Blob | null>(null);
+  const [videoBlob, setVideoBlob] = useState<Blob | null>(null);
+  const [photoBlob, setPhotoBlob] = useState<Blob | null>(null);
+
+  useEffect(() => {
+    if (!SOCKET_URL) return;
+    const s = io(SOCKET_URL, { transports: ['websocket','polling'] });
+    socketRef.current = s;
+    return () => { try { s.disconnect(); } catch {} };
+  }, []);
 
   useEffect(() => {
     if (stage === 'escalation' && countdown > 0) {
@@ -40,37 +55,37 @@ export default function SOSEmergency({ userLocation, onCancel, onEscalate }: SOS
     setStage('details');
   };
 
+  const blobToDataUrl = (b: Blob | null) =>
+    !b ? Promise.resolve(undefined)
+       : new Promise<string>((res) => { const r = new FileReader(); r.onloadend = () => res(r.result as string); r.readAsDataURL(b); });
+
+  // replace handleSubmitDetails with socket emit
   const handleSubmitDetails = async () => {
     try {
-      // Create real SOS emergency via API
-      const response = await fetch('/api/sos/create', {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          userPhone: '+91-9876543210', // In real app, get from user context
-          location: userLocation,
-          description,
-          emergencyContacts: [
-            { name: 'Emergency Contact', phone: '+91-9876543210', relationship: 'Family' }
-          ]
-        }),
-      });
+      const audio = await blobToDataUrl(audioBlob);
+      const video = await blobToDataUrl(videoBlob);
+      const photo = await blobToDataUrl(photoBlob);
 
-      if (!response.ok) {
-        throw new Error('Failed to create emergency');
-      }
+      // Pull lightweight identity available in app/session
+      const touristId = localStorage.getItem('tourist_id') || undefined;
+      const touristName = localStorage.getItem('tourist_name') || undefined;
+      const touristPhone = localStorage.getItem('userId') || undefined;
 
-      const result = await response.json();
-      console.log('✅ SOS Emergency Created:', result);
-      
-      // Store emergency ID for escalation
+      const payload = {
+        id: crypto.randomUUID(),
+        touristId,
+        touristName,
+        touristPhone,
+        location: userLocation, // {lat,lng}
+        description,
+        media: { audio, video, photo },
+      };
+
+      socketRef.current?.emit('sos-create', payload);
       setStage('escalation');
-      (window as any).currentEmergencyId = result.emergencyId;
-      
-    } catch (error) {
-      console.error('❌ Error creating SOS emergency:', error);
+      (window as any).currentEmergencyId = payload.id;
+    } catch (e) {
+      console.error('❌ SOS emit failed', e);
       alert('Failed to create emergency alert. Please call 112 directly.');
     }
   };
@@ -124,101 +139,77 @@ This is a real emergency alert - authorities are being contacted.
     }
   };
 
+  // augment existing recorders to set blobs
   const handleRecording = async () => {
     if (!isRecording) {
       try {
-        // Request microphone permission and start recording
         const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-        
-        const mediaRecorder = new MediaRecorder(stream);
+        const mediaRecorder = new MediaRecorder(stream, { mimeType: 'audio/webm' });
         const audioChunks: BlobPart[] = [];
-        
-        mediaRecorder.ondataavailable = (event) => {
-          audioChunks.push(event.data);
-        };
-        
+        mediaRecorder.ondataavailable = (event) => { audioChunks.push(event.data); };
         mediaRecorder.onstop = () => {
-          const audioBlob = new Blob(audioChunks, { type: 'audio/wav' });
-          console.log('🎙️ Audio recording completed:', audioBlob);
-          
-          // In real implementation, upload to server
-          // For now, store locally
-          const audioUrl = URL.createObjectURL(audioBlob);
-          console.log('Audio URL:', audioUrl);
+          const audioBlob = new Blob(audioChunks, { type: 'audio/webm' });
+          setAudioBlob(audioBlob);
         };
-        
         mediaRecorder.start();
         setIsRecording(true);
-        console.log('🎙️ Started recording audio evidence');
-        
-        // Store recorder reference for stopping
         (window as any).mediaRecorder = mediaRecorder;
-        
       } catch (error) {
         console.error('❌ Error accessing microphone:', error);
         alert('Could not access microphone for audio recording');
       }
     } else {
-      // Stop recording
       const mediaRecorder = (window as any).mediaRecorder;
       if (mediaRecorder && mediaRecorder.state !== 'inactive') {
         mediaRecorder.stop();
         mediaRecorder.stream.getTracks().forEach((track: MediaStreamTrack) => track.stop());
       }
       setIsRecording(false);
-      console.log('🎙️ Stopped recording');
     }
   };
 
   const handleCamera = async () => {
     try {
-      // Request camera permission and take photo
-      const stream = await navigator.mediaDevices.getUserMedia({ 
-        video: { 
-          facingMode: 'environment' // Back camera preferred
-        } 
-      });
-      
-      // Create video element to capture frame
+      const stream = await navigator.mediaDevices.getUserMedia({ video: { facingMode: 'environment' } });
       const video = document.createElement('video');
       const canvas = document.createElement('canvas');
       const ctx = canvas.getContext('2d');
-      
       video.srcObject = stream;
       video.play();
-      
       video.onloadedmetadata = () => {
         canvas.width = video.videoWidth;
         canvas.height = video.videoHeight;
-        
         if (ctx) {
           ctx.drawImage(video, 0, 0);
-          
-          // Convert to blob
           canvas.toBlob((blob) => {
-            if (blob) {
-              console.log('📷 Photo captured:', blob);
-              
-              // In real implementation, upload to server
-              const photoUrl = URL.createObjectURL(blob);
-              console.log('Photo URL:', photoUrl);
-              
-              // Show success feedback
-              alert('Photo captured successfully for emergency evidence');
-            }
+            if (blob) setPhotoBlob(blob);
           }, 'image/jpeg', 0.8);
         }
-        
-        // Stop camera stream
         stream.getTracks().forEach(track => track.stop());
       };
-      
-      console.log('📷 Camera activated for evidence capture');
-      
     } catch (error) {
       console.error('❌ Error accessing camera:', error);
       alert('Could not access camera for photo evidence');
     }
+  };
+
+  // Video evidence (optional, not in UI but available for future use)
+  const startVideo = async () => {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true, video: true });
+    const rec = new MediaRecorder(stream, { mimeType: 'video/webm' });
+    const chunks: BlobPart[] = [];
+    rec.ondataavailable = (e) => chunks.push(e.data);
+    rec.onstop = () => {
+      const b = new Blob(chunks, { type: 'video/webm' });
+      setVideoBlob(b);
+      stream.getTracks().forEach(t => t.stop());
+    };
+    rec.start();
+    (window as any).videoRecorder = rec;
+  };
+  const stopVideo = () => {
+    const rec: MediaRecorder | undefined = (window as any).videoRecorder;
+    if (rec && rec.state !== 'inactive') rec.stop();
   };
 
   if (stage === 'confirmation') {
